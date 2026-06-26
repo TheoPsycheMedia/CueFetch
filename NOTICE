@@ -1,0 +1,26 @@
+CueFetch
+Copyright 2026 Edgar Iraheta
+
+CueFetch is an independent native macOS front-end for reviewing and
+running yt-dlp downloads. CueFetch is not affiliated with yt-dlp,
+FFmpeg, YouTube, Vimeo, TikTok, X, or any other supported site.
+
+Third-party tools:
+
+- yt-dlp: https://github.com/yt-dlp/yt-dlp
+  yt-dlp is released under the Unlicense. CueFetch invokes yt-dlp when
+  it is installed on the user's system; CueFetch does not vendor or
+  modify yt-dlp.
+
+- FFmpeg: https://ffmpeg.org/
+  FFmpeg is licensed primarily under LGPL v2.1+ with optional GPL
+  components depending on build configuration. CueFetch detects FFmpeg
+  when it is installed on the user's system; CueFetch does not vendor
+  or modify FFmpeg.
+
+Responsible use:
+
+CueFetch is intended for downloading media that the user has the right
+to access, download, archive, or transform. Users are responsible for
+complying with copyright law, platform terms, and their own access
+rights. CueFetch does not bypass DRM.
