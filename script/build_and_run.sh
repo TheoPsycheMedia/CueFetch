@@ -22,10 +22,11 @@ SAVED_STATE="$HOME/Library/Saved Application State/$BUNDLE_ID.savedState"
 INSTALL_APP="/Applications/$APP_NAME.app"
 
 build_app() {
+  local configuration="${1:-debug}"
   pkill -x "$APP_NAME" >/dev/null 2>&1 || true
 
-  swift build
-  BUILD_DIR="$(swift build --show-bin-path)"
+  swift build -c "$configuration"
+  BUILD_DIR="$(swift build -c "$configuration" --show-bin-path)"
   BUILD_BINARY="$BUILD_DIR/$APP_NAME"
 
   rm -rf "$APP_BUNDLE"
@@ -67,6 +68,22 @@ build_app() {
 </dict>
 </plist>
 PLIST
+
+  if [[ -n "${CUEFETCH_SIGN_IDENTITY:-}" ]]; then
+    codesign \
+      --force \
+      --deep \
+      --options runtime \
+      --timestamp \
+      --sign "$CUEFETCH_SIGN_IDENTITY" \
+      "$APP_BUNDLE"
+  else
+    codesign \
+      --force \
+      --deep \
+      --sign - \
+      "$APP_BUNDLE"
+  fi
 }
 
 open_app() {
@@ -75,7 +92,7 @@ open_app() {
 }
 
 build_dmg() {
-  build_app
+  build_app release
   rm -rf "$DMG_ROOT" "$DMG_PATH"
   mkdir -p "$DMG_ROOT"
   ditto "$APP_BUNDLE" "$DMG_ROOT/$APP_NAME.app"
@@ -86,12 +103,19 @@ build_dmg() {
     -ov \
     -format UDZO \
     "$DMG_PATH" >/dev/null
+  if [[ -n "${CUEFETCH_SIGN_IDENTITY:-}" ]]; then
+    codesign \
+      --force \
+      --timestamp \
+      --sign "$CUEFETCH_SIGN_IDENTITY" \
+      "$DMG_PATH"
+  fi
   hdiutil verify "$DMG_PATH" >/dev/null
   echo "$DMG_PATH"
 }
 
 install_app() {
-  build_app
+  build_app release
   rm -rf "$INSTALL_APP"
   ditto "$APP_BUNDLE" "$INSTALL_APP"
   /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$INSTALL_APP" >/dev/null 2>&1 || true

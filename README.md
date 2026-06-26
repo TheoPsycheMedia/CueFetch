@@ -51,6 +51,13 @@ Install the tools with Homebrew:
 brew install yt-dlp ffmpeg
 ```
 
+## Download
+
+Preview builds are published on the
+[GitHub Releases page](https://github.com/TheoPsycheMedia/CueFetch/releases).
+Early DMGs may be unsigned unless the release notes explicitly say they are
+signed and notarized.
+
 ## Run From Source
 
 ```bash
@@ -70,6 +77,12 @@ Build a local DMG:
 
 ```bash
 ./script/build_and_run.sh --dmg
+```
+
+To sign a local build, provide a codesigning identity:
+
+```bash
+CUEFETCH_SIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)" ./script/build_and_run.sh --dmg
 ```
 
 ## Current Status
