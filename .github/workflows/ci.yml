@@ -1,0 +1,106 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Test, build, and package
+    runs-on: macos-15
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Record toolchain
+        run: |
+          swift --version
+          xcodebuild -version
+
+      - name: Check committed whitespace
+        run: |
+          empty_tree="$(git hash-object -t tree /dev/null)"
+          git diff --check "$empty_tree" HEAD
+
+      - name: Test with coverage
+        run: swift test --enable-code-coverage
+
+      - name: Report source coverage
+        run: |
+          mkdir -p .build/ci-coverage
+          coverage_json="$(swift test --show-codecov-path)"
+          test_binary="$(find .build -type f -path '*/CueFetchPackageTests.xctest/Contents/MacOS/CueFetchPackageTests' -print -quit)"
+          profile="$(find .build -type f -path '*/codecov/default.profdata' -print -quit)"
+          test -n "$test_binary"
+          test -n "$profile"
+          cp "$coverage_json" .build/ci-coverage/coverage.json
+          xcrun llvm-cov report \
+            "$test_binary" \
+            -instr-profile="$profile" \
+            -ignore-filename-regex='(^|/)(Tests|\.build)/' \
+            | tee .build/ci-coverage/source-coverage-summary.txt
+          xcrun llvm-cov report \
+            "$test_binary" \
+            -instr-profile="$profile" \
+            -ignore-filename-regex='(^|/)(Tests/|\.build/|Sources/CueFetch/)' \
+            | tee .build/ci-coverage/core-coverage-summary.txt
+          core_line_coverage="$(awk '$1 == "TOTAL" { gsub("%", "", $10); print $10 }' .build/ci-coverage/core-coverage-summary.txt)"
+          test -n "$core_line_coverage"
+          awk -v coverage="$core_line_coverage" 'BEGIN {
+            if (coverage + 0 < 80) {
+              printf "CueFetchCore line coverage %.2f%% is below the 80%% gate.\n", coverage > "/dev/stderr"
+              exit 1
+            }
+          }'
+          {
+            echo '## All source coverage'
+            echo '```text'
+            cat .build/ci-coverage/source-coverage-summary.txt
+            echo '```'
+            echo '## CueFetchCore coverage'
+            echo '```text'
+            cat .build/ci-coverage/core-coverage-summary.txt
+            echo '```'
+            echo "Gate: CueFetchCore line coverage ${core_line_coverage}% (minimum 80%)."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Build release configuration
+        run: swift build --configuration release
+
+      - name: Build universal release DMG
+        run: ./script/build_and_run.sh --dmg
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: cuefetch-coverage
+          path: .build/ci-coverage/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload ad-hoc preview package
+        uses: actions/upload-artifact@v4
+        with:
+          name: cuefetch-universal-preview
+          path: |
+            dist/CueFetch-*.dmg
+            dist/CueFetch-*.dmg.sha256
+            dist/CueFetch-*-release-notes.md
+          if-no-files-found: error
+          retention-days: 14
