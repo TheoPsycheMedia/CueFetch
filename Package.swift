@@ -27,6 +27,11 @@ let package = Package(
             name: "CueFetchCoreTests",
             dependencies: ["CueFetchCore"],
             path: "Tests/CueFetchCoreTests"
+        ),
+        .testTarget(
+            name: "CueFetchTests",
+            dependencies: ["CueFetch", "CueFetchCore"],
+            path: "Tests/CueFetchTests"
         )
     ]
 )

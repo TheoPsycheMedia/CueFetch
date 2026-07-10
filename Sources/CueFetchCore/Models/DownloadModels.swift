@@ -1,6 +1,6 @@
 import Foundation
 
-public enum SiteKind: String, CaseIterable, Identifiable, Sendable {
+public enum SiteKind: String, CaseIterable, Identifiable, Codable, Sendable {
     case youtube = "YouTube"
     case vimeo = "Vimeo"
     case tiktok = "TikTok"
@@ -44,10 +44,138 @@ public enum OutputPreset: String, CaseIterable, Identifiable, Sendable {
 
     public var subtitle: String {
         switch self {
-        case .bestVideo: "Highest quality"
-        case .mp4FullHD: "High quality"
-        case .audioOnly: "MP3 / M4A"
-        case .custom: "Choose formats"
+        case .bestVideo: "Highest resolution"
+        case .mp4FullHD: "H.264 + AAC"
+        case .audioOnly: "M4A audio"
+        case .custom: "Choose a format"
+        }
+    }
+}
+
+public struct DownloadProfile: Identifiable, Equatable, Sendable {
+    public let id: String
+    public var name: String
+    public var summary: String
+    public var destination: String
+    public var preset: OutputPreset
+    public var includeSubtitles: Bool
+    public var subtitleLanguages: String
+
+    public init(
+        id: String,
+        name: String,
+        summary: String,
+        destination: String,
+        preset: OutputPreset,
+        includeSubtitles: Bool,
+        subtitleLanguages: String = "all,-live_chat"
+    ) {
+        self.id = id
+        self.name = name
+        self.summary = summary
+        self.destination = destination
+        self.preset = preset
+        self.includeSubtitles = includeSubtitles
+        self.subtitleLanguages = subtitleLanguages
+    }
+
+    public static let all: [DownloadProfile] = [
+        DownloadProfile(
+            id: "editing",
+            name: "Editing",
+            summary: "1080p MP4 with captions",
+            destination: "~/Downloads/CueFetch/Editing",
+            preset: .mp4FullHD,
+            includeSubtitles: true
+        ),
+        DownloadProfile(
+            id: "audio",
+            name: "Audio",
+            summary: "M4A extraction",
+            destination: "~/Downloads/CueFetch/Audio",
+            preset: .audioOnly,
+            includeSubtitles: false
+        ),
+        DownloadProfile(
+            id: "archive",
+            name: "Archive",
+            summary: "Best available media",
+            destination: "~/Downloads/CueFetch/Archive",
+            preset: .bestVideo,
+            includeSubtitles: true
+        ),
+        DownloadProfile(
+            id: "sermon-clips",
+            name: "Sermon Clips",
+            summary: "1080p MP4 for reels",
+            destination: "~/Downloads/CueFetch/Sermon Clips",
+            preset: .mp4FullHD,
+            includeSubtitles: true
+        )
+    ]
+
+    public static func profile(id: String) -> DownloadProfile? {
+        all.first { $0.id == id }
+    }
+}
+
+public enum DownloadTool: String, CaseIterable, Hashable, Sendable {
+    case ytDLP = "yt-dlp"
+    case ffmpeg
+}
+
+public enum MediaKind: Equatable, Sendable {
+    case video
+    case audio
+}
+
+public enum MediaCompatibility: Equatable, Sendable {
+    case quickTime
+    case music
+    case requiresConversion
+
+    public var label: String {
+        switch self {
+        case .quickTime: "Compatible with QuickTime"
+        case .music: "Compatible with Music"
+        case .requiresConversion: "May require conversion"
+        }
+    }
+}
+
+public enum MediaFormatSelection: Equatable, Sendable {
+    case video(
+        formatSelector: String,
+        mergeOutputFormat: String?
+    )
+    case audio(formatSelector: String)
+
+    public var kind: MediaKind {
+        switch self {
+        case .video: .video
+        case .audio: .audio
+        }
+    }
+
+    public var formatSelector: String {
+        switch self {
+        case let .video(formatSelector, _), let .audio(formatSelector):
+            formatSelector
+        }
+    }
+
+    public var mergeOutputFormat: String? {
+        guard case let .video(_, mergeOutputFormat) = self else { return nil }
+        return mergeOutputFormat
+    }
+
+    public var requiredTools: Set<DownloadTool> {
+        switch self {
+        case let .video(formatSelector, mergeOutputFormat):
+            formatSelector.contains("+") || mergeOutputFormat != nil
+                ? [.ytDLP, .ffmpeg]
+                : [.ytDLP]
+        case .audio: [.ytDLP]
         }
     }
 }
@@ -60,9 +188,15 @@ public struct MediaFormat: Identifiable, Equatable, Sendable {
     public var audio: String
     public var estimatedSize: String
     public var subtitles: Bool
-    public var compatibility: String
-    public var ytDLPFormat: String
-    public var isAudioOnly: Bool
+    public var compatibilityKind: MediaCompatibility
+    public var selection: MediaFormatSelection
+    public var pixelWidth: Int?
+    public var pixelHeight: Int?
+
+    public var kind: MediaKind { selection.kind }
+    public var compatibility: String { compatibilityKind.label }
+    public var ytDLPFormat: String { selection.formatSelector }
+    public var isAudioOnly: Bool { kind == .audio }
 
     public init(
         id: UUID = UUID(),
@@ -72,9 +206,10 @@ public struct MediaFormat: Identifiable, Equatable, Sendable {
         audio: String,
         estimatedSize: String,
         subtitles: Bool,
-        compatibility: String,
-        ytDLPFormat: String,
-        isAudioOnly: Bool = false
+        compatibilityKind: MediaCompatibility,
+        selection: MediaFormatSelection,
+        pixelWidth: Int? = nil,
+        pixelHeight: Int? = nil
     ) {
         self.id = id
         self.quality = quality
@@ -83,9 +218,16 @@ public struct MediaFormat: Identifiable, Equatable, Sendable {
         self.audio = audio
         self.estimatedSize = estimatedSize
         self.subtitles = subtitles
-        self.compatibility = compatibility
-        self.ytDLPFormat = ytDLPFormat
-        self.isAudioOnly = isAudioOnly
+        self.compatibilityKind = compatibilityKind
+        self.selection = selection
+        self.pixelWidth = pixelWidth
+        self.pixelHeight = pixelHeight
+    }
+
+    public var pixelCount: Int {
+        let height = max(pixelHeight ?? 0, 0)
+        let width = max(pixelWidth ?? height, 0)
+        return width * height
     }
 }
 
@@ -101,6 +243,7 @@ public struct DownloadCandidate: Identifiable, Equatable, Sendable {
     public var site: SiteKind
     public var accessState: AccessState
     public var formats: [MediaFormat]
+    public var subtitleLanguages: [String]
 
     public init(
         id: UUID = UUID(),
@@ -113,7 +256,8 @@ public struct DownloadCandidate: Identifiable, Equatable, Sendable {
         thumbnailURL: String? = nil,
         site: SiteKind,
         accessState: AccessState,
-        formats: [MediaFormat]
+        formats: [MediaFormat],
+        subtitleLanguages: [String] = []
     ) {
         self.id = id
         self.title = title
@@ -126,6 +270,7 @@ public struct DownloadCandidate: Identifiable, Equatable, Sendable {
         self.site = site
         self.accessState = accessState
         self.formats = formats
+        self.subtitleLanguages = subtitleLanguages
     }
 }
 
@@ -168,33 +313,105 @@ public struct ToolStatus: Equatable, Sendable {
         self.ffmpegPath = ffmpegPath
     }
 
-    public var isReady: Bool {
-        ytdlpPath != nil
+    public var isYTDLPInstalled: Bool { ytdlpPath != nil }
+    public var isFFmpegInstalled: Bool { ffmpegPath != nil }
+
+    public func missingTools(required: Set<DownloadTool>) -> Set<DownloadTool> {
+        required.filter { tool in
+            switch tool {
+            case .ytDLP: !isYTDLPInstalled
+            case .ffmpeg: !isFFmpegInstalled
+            }
+        }
     }
 }
 
-public struct DownloadOptions: Equatable, Sendable {
-    public var url: String
-    public var destination: String
-    public var preset: OutputPreset
-    public var format: MediaFormat
-    public var includeSubtitles: Bool
-    public var useBrowserCookies: Bool
+public enum EffectiveDownloadSelection: Equatable, Sendable {
+    case selectedFormat(MediaFormatSelection)
+    case fixedQuickTimeMP4(maximumHeight: Int)
+    case fixedM4A
+}
+
+public enum DownloadPlanError: Error, Equatable, Sendable {
+    case missingSelectedFormat
+    case selectedVideoFormatRequired
+    case missingTools(Set<DownloadTool>)
+}
+
+public struct DownloadPlan: Equatable, Sendable {
+    public let url: ValidatedMediaURL
+    public let destination: String
+    public let preset: OutputPreset
+    public let selectedFormat: MediaFormat?
+    public let effectiveSelection: EffectiveDownloadSelection
+    public let includeSubtitles: Bool
+    public let subtitleLanguages: String
+    public let useBrowserCookies: Bool
+    public let compatibility: MediaCompatibility
+    public let requiredTools: Set<DownloadTool>
 
     public init(
-        url: String,
+        url: ValidatedMediaURL,
         destination: String,
         preset: OutputPreset,
-        format: MediaFormat,
+        selectedFormat: MediaFormat? = nil,
         includeSubtitles: Bool,
+        subtitleLanguages: String = "all,-live_chat",
         useBrowserCookies: Bool
-    ) {
+    ) throws {
+        let effectiveSelection: EffectiveDownloadSelection
+        let compatibility: MediaCompatibility
+        let requiredTools: Set<DownloadTool>
+
+        switch preset {
+        case .bestVideo:
+            guard let selectedFormat else {
+                throw DownloadPlanError.missingSelectedFormat
+            }
+            guard selectedFormat.kind == .video else {
+                throw DownloadPlanError.selectedVideoFormatRequired
+            }
+            effectiveSelection = .selectedFormat(selectedFormat.selection)
+            compatibility = selectedFormat.compatibilityKind
+            requiredTools = selectedFormat.selection.requiredTools
+        case .mp4FullHD:
+            effectiveSelection = .fixedQuickTimeMP4(maximumHeight: 1080)
+            compatibility = .quickTime
+            requiredTools = [.ytDLP, .ffmpeg]
+        case .audioOnly:
+            effectiveSelection = .fixedM4A
+            compatibility = .music
+            requiredTools = [.ytDLP, .ffmpeg]
+        case .custom:
+            guard let selectedFormat else {
+                throw DownloadPlanError.missingSelectedFormat
+            }
+            effectiveSelection = .selectedFormat(selectedFormat.selection)
+            compatibility = selectedFormat.compatibilityKind
+            requiredTools = selectedFormat.selection.requiredTools
+        }
+
         self.url = url
         self.destination = destination
         self.preset = preset
-        self.format = format
+        self.selectedFormat = selectedFormat
+        self.effectiveSelection = effectiveSelection
         self.includeSubtitles = includeSubtitles
+        self.subtitleLanguages = subtitleLanguages
         self.useBrowserCookies = useBrowserCookies
+        self.compatibility = compatibility
+        self.requiredTools = requiredTools
+    }
+
+    public func missingTools(in status: ToolStatus) -> Set<DownloadTool> {
+        status.missingTools(required: requiredTools)
+    }
+
+    public func validateTools(against status: ToolStatus) throws {
+        let missing = missingTools(in: status)
+        guard missing.isEmpty else {
+            throw DownloadPlanError.missingTools(missing)
+        }
     }
 }
 

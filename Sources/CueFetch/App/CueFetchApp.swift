@@ -1,6 +1,25 @@
 import AppKit
 import SwiftUI
 
+enum CueFetchWindowMetrics {
+    static let minimumWidth: CGFloat = 960
+    static let minimumHeight: CGFloat = 660
+    static let preferredWidth: CGFloat = 1040
+    static let preferredHeight: CGFloat = 720
+
+    static var minimumContentSize: NSSize {
+        NSSize(width: minimumWidth, height: minimumHeight)
+    }
+
+    static var preferredContentSize: NSSize {
+        NSSize(width: preferredWidth, height: preferredHeight)
+    }
+
+    static func isBelowMinimum(_ size: NSSize) -> Bool {
+        size.width < minimumWidth || size.height < minimumHeight
+    }
+}
+
 @main
 struct CueFetchMain {
     @MainActor private static var appDelegate: AppDelegate?
@@ -42,7 +61,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let window = mainWindow ?? makeMainWindow()
         mainWindow = window
         window.setFrame(targetFrame, display: true, animate: false)
-        window.setContentSize(NSSize(width: 1040, height: 720))
+        window.setContentSize(CueFetchWindowMetrics.preferredContentSize)
         window.makeKeyAndOrderFront(nil)
         window.orderFrontRegardless()
         NSApp.activate(ignoringOtherApps: true)
@@ -50,11 +69,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     private func makeMainWindow() -> NSWindow {
         let rootView = ContentView(store: store)
-            .frame(minWidth: 960, minHeight: 660)
+            .frame(
+                minWidth: CueFetchWindowMetrics.minimumWidth,
+                minHeight: CueFetchWindowMetrics.minimumHeight
+            )
             .preferredColorScheme(.light)
 
         let window = NSWindow(
-            contentRect: centeredFrame(width: 1040, height: 720),
+            contentRect: targetFrame,
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered,
             defer: false
@@ -63,8 +85,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         window.titleVisibility = .hidden
         window.titlebarAppearsTransparent = true
         window.styleMask.insert(.fullSizeContentView)
-        window.minSize = NSSize(width: 960, height: 660)
-        window.contentMinSize = NSSize(width: 960, height: 660)
+        window.contentMinSize = CueFetchWindowMetrics.minimumContentSize
+        window.minSize = CueFetchWindowMetrics.minimumContentSize
         window.contentView = NSHostingView(rootView: rootView)
         window.delegate = self
         window.isReleasedWhenClosed = false
@@ -76,12 +98,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         mainWindow = window
         let frame = targetFrame
         let visibleFrame = NSScreen.main?.visibleFrame ?? frame
-        let tooSmall = window.frame.width < 900 || window.frame.height < 620
+        let tooSmall = CueFetchWindowMetrics.isBelowMinimum(window.contentLayoutRect.size)
         let offscreen = !visibleFrame.intersects(window.frame)
 
         if tooSmall || offscreen {
             window.setFrame(frame, display: true, animate: false)
-            window.setContentSize(NSSize(width: 1040, height: 720))
+            window.setContentSize(CueFetchWindowMetrics.preferredContentSize)
         }
 
         window.makeKeyAndOrderFront(nil)
@@ -90,7 +112,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     private var targetFrame: NSRect {
-        centeredFrame(width: 1040, height: 720)
+        centeredFrame(
+            width: CueFetchWindowMetrics.preferredWidth,
+            height: CueFetchWindowMetrics.preferredHeight
+        )
     }
 
     private func configureMainMenu() {

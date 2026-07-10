@@ -1,6 +1,24 @@
 import CueFetchCore
 import SwiftUI
 
+struct DownloadInputControlState: Equatable {
+    let hasAnalyzableInput: Bool
+    let isAnalyzing: Bool
+    let isDownloading: Bool
+
+    var isURLInputEnabled: Bool {
+        !isDownloading
+    }
+
+    var isAnalyzeEnabled: Bool {
+        hasAnalyzableInput && !isAnalyzing && !isDownloading
+    }
+
+    var isRecentSelectionEnabled: Bool {
+        !isDownloading
+    }
+}
+
 struct ContentView: View {
     @ObservedObject var store: DownloadStore
 
@@ -38,23 +56,14 @@ private struct TopBarView: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            HStack(spacing: 6) {
-                Text("CueFetch")
-                    .font(.system(size: 20, weight: .semibold))
-                Image(systemName: "chevron.down")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(.secondary)
-            }
+            Text("CueFetch")
+                .font(.system(size: 20, weight: .semibold))
 
             Spacer()
 
-            Button {
-                store.statusMessage = store.recentLinks.isEmpty ? "No links analyzed yet" : "Recent links are shown in the left column"
-            } label: {
-                Label("History", systemImage: "clock.arrow.circlepath")
-                    .frame(minWidth: 88)
-            }
-            .buttonStyle(.bordered)
+            Label("Session history", systemImage: "clock.arrow.circlepath")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(.secondary)
 
             Button {
                 store.refreshToolStatus()
@@ -67,18 +76,18 @@ private struct TopBarView: View {
 
             HStack(spacing: 8) {
                 Circle()
-                    .fill(store.toolStatus.isReady ? CueFetchTheme.green : CueFetchTheme.orange)
+                    .fill(store.toolStatus.isYTDLPInstalled ? CueFetchTheme.green : CueFetchTheme.orange)
                     .frame(width: 16, height: 16)
                     .overlay {
-                        Image(systemName: store.toolStatus.isReady ? "checkmark" : "exclamationmark")
+                        Image(systemName: store.toolStatus.isYTDLPInstalled ? "checkmark" : "exclamationmark")
                             .font(.system(size: 9, weight: .bold))
                             .foregroundStyle(.white)
                     }
-                Text(store.toolStatus.isReady ? "Up to date" : "Needs yt-dlp")
+                Text(store.toolStatus.isYTDLPInstalled ? "yt-dlp installed" : "Needs yt-dlp")
                     .font(.system(size: 13, weight: .medium))
                     .lineLimit(1)
             }
-            .frame(width: 120, alignment: .trailing)
+            .frame(width: 136, alignment: .trailing)
         }
         .padding(.leading, 112)
         .padding(.trailing, 20)
@@ -102,7 +111,10 @@ private struct NewDownloadPane: View {
                     .font(.system(size: 17, weight: .semibold))
 
                 ZStack(alignment: .topLeading) {
-                    TextEditor(text: $store.inputURL)
+                    TextEditor(text: Binding(
+                        get: { store.inputURL },
+                        set: { store.setInputURL($0) }
+                    ))
                         .font(.system(size: 15))
                         .scrollContentBackground(.hidden)
                         .padding(.leading, 34)
@@ -114,6 +126,7 @@ private struct NewDownloadPane: View {
                             RoundedRectangle(cornerRadius: 7, style: .continuous)
                                 .stroke(store.inputURL.isEmpty ? CueFetchTheme.blue : CueFetchTheme.border, lineWidth: 1.5)
                         )
+                        .disabled(!controlState.isURLInputEnabled)
 
                     HStack(alignment: .top, spacing: 12) {
                         Image(systemName: "link")
@@ -151,13 +164,17 @@ private struct NewDownloadPane: View {
                     .frame(height: 38)
                 }
                 .buttonStyle(.borderedProminent)
-                .disabled(!store.canAnalyze || store.isAnalyzing)
+                .disabled(!controlState.isAnalyzeEnabled)
+
+                if let warning = store.pendingIntakeWarning {
+                    IntakeWarningPanel(store: store, warning: warning)
+                }
             }
 
             Divider()
 
             HStack {
-                Text("Recent links")
+                Text("Recent links this session")
                     .font(.system(size: 15, weight: .semibold))
                 Spacer()
                 Button("Clear") {
@@ -165,7 +182,7 @@ private struct NewDownloadPane: View {
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(.secondary)
-                .disabled(store.recentLinks.isEmpty)
+                .disabled(store.recentLinks.isEmpty || !controlState.isRecentSelectionEnabled)
             }
 
             if store.recentLinks.isEmpty {
@@ -181,27 +198,126 @@ private struct NewDownloadPane: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 34)
                 .cuePanel(radius: 8)
+                .frame(maxHeight: .infinity, alignment: .top)
             } else {
-                VStack(spacing: 0) {
-                    ForEach(store.recentLinks) { link in
-                        RecentLinkRow(link: link, selected: link.url == store.candidate?.url) {
-                            store.selectRecent(link)
-                        }
+                ScrollView {
+                    LazyVStack(spacing: 0) {
+                        ForEach(store.recentLinks) { link in
+                            RecentLinkRow(link: link, selected: link.url == store.candidate?.url) {
+                                store.selectRecent(link)
+                            }
+                            .disabled(!controlState.isRecentSelectionEnabled)
 
-                        if link.id != store.recentLinks.last?.id {
-                            Divider()
-                                .padding(.leading, 128)
+                            if link.id != store.recentLinks.last?.id {
+                                Divider()
+                                    .padding(.leading, 94)
+                            }
                         }
                     }
                 }
+                .scrollIndicators(.automatic)
+                .frame(maxHeight: .infinity, alignment: .top)
             }
-
-            Spacer()
         }
         .padding(.top, 18)
         .padding(.leading, 18)
         .padding(.trailing, 14)
         .background(Color.white.opacity(0.76))
+    }
+
+    private var controlState: DownloadInputControlState {
+        DownloadInputControlState(
+            hasAnalyzableInput: store.canAnalyze,
+            isAnalyzing: store.isAnalyzing,
+            isDownloading: store.isDownloading
+        )
+    }
+}
+
+private struct IntakeWarningPanel: View {
+    @ObservedObject var store: DownloadStore
+    let warning: URLIntakeResult
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 9) {
+                Image(systemName: warning.kind == .multipleLinks ? "link.badge.plus" : "rectangle.stack.badge.play")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(CueFetchTheme.orange)
+                    .frame(width: 18)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(title)
+                        .font(.system(size: 13.5, weight: .semibold))
+                    Text(detail)
+                        .font(.system(size: 12.5))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
+            HStack(spacing: 8) {
+                if warning.kind != .playlist || warning.canAnalyzeSingleVideo {
+                    Button {
+                        store.analyzePrimaryIntakeURL()
+                    } label: {
+                        Label(primaryActionTitle, systemImage: "magnifyingglass")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(store.isDownloading)
+                }
+
+                Button {
+                    store.clearIntakeWarning()
+                } label: {
+                    Label("Cancel", systemImage: "xmark")
+                        .frame(maxWidth: .infinity)
+                }
+            }
+        }
+        .padding(10)
+        .background(CueFetchTheme.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(CueFetchTheme.orange.opacity(0.24), lineWidth: 1)
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    private var title: String {
+        switch warning.kind {
+        case .multipleLinks:
+            "\(warning.urlCount) links pasted"
+        case .playlist:
+            "Playlist detected"
+        case .single, .empty, .invalid:
+            "Review link"
+        }
+    }
+
+    private var detail: String {
+        switch warning.kind {
+        case .multipleLinks:
+            "CueFetch reviews one link at a time. Start with the first detected link or cancel and paste only one."
+        case .playlist:
+            warning.canAnalyzeSingleVideo
+                ? "This URL includes playlist data. CueFetch will analyze only the direct video."
+                : "CueFetch downloads one item at a time. Paste a direct video URL instead of a playlist."
+        case .single, .empty, .invalid:
+            "Confirm what CueFetch should analyze."
+        }
+    }
+
+    private var primaryActionTitle: String {
+        switch warning.kind {
+        case .multipleLinks:
+            "Analyze First"
+        case .playlist:
+            "Video Only"
+        case .single, .empty, .invalid:
+            "Analyze"
+        }
     }
 }
 
@@ -260,10 +376,9 @@ private struct BottomStatusBar: View {
         HStack(spacing: 18) {
             HStack(spacing: 8) {
                 Image(systemName: "globe")
-                Text("Supported sites (1700+)")
-                    .underline()
-                    .foregroundStyle(CueFetchTheme.blue)
+                Text("Site support provided by yt-dlp")
             }
+            .foregroundStyle(.secondary)
 
             Spacer()
 
@@ -295,11 +410,8 @@ private struct BottomStatusBar: View {
             }
             .foregroundStyle(.secondary)
 
-            Button("Check for updates") {
-                store.refreshToolStatus()
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(CueFetchTheme.blue)
+            Link("View Releases", destination: URL(string: "https://github.com/TheoPsycheMedia/CueFetch/releases")!)
+                .foregroundStyle(CueFetchTheme.blue)
         }
         .font(.system(size: 12))
         .padding(.horizontal, 20)
