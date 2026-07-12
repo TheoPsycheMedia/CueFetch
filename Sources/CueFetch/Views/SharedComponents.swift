@@ -260,7 +260,7 @@ struct SettingsView: View {
         case "editing": "film"
         case "audio": "waveform"
         case "archive": "externaldrive"
-        case "sermon-clips": "rectangle.stack"
+        case "short-clips": "rectangle.stack"
         default: "slider.horizontal.3"
         }
     }

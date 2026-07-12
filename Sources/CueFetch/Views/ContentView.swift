@@ -23,23 +23,7 @@ struct ContentView: View {
     @ObservedObject var store: DownloadStore
 
     var body: some View {
-        VStack(spacing: 0) {
-            TopBarView(store: store)
-
-            HStack(spacing: 0) {
-                NewDownloadPane(store: store)
-                    .frame(width: 300)
-
-                Divider()
-
-                PreflightPane(store: store)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            }
-
-            BottomStatusBar(store: store)
-                .frame(height: 44)
-        }
-        .background(CueFetchTheme.page)
+        LiquidOrbitView(store: store)
         .onAppear {
             store.refreshToolStatus()
             store.updateCommandPreview()

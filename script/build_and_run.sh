@@ -3,7 +3,7 @@ set -euo pipefail
 
 MODE="${1:-run}"
 APP_NAME="CueFetch"
-BUNDLE_ID="com.edgariraheta.CueFetch"
+BUNDLE_ID="com.theopsychemedia.CueFetch"
 MIN_SYSTEM_VERSION="14.0"
 RELEASE_VERSION="${CUEFETCH_VERSION:-0.2.0-preview}"
 MARKETING_VERSION="${CUEFETCH_MARKETING_VERSION:-${RELEASE_VERSION%%-*}}"

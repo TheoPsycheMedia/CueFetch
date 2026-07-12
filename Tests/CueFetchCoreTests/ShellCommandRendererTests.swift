@@ -7,14 +7,14 @@ struct ShellCommandRendererTests {
             executable: "/opt/homebrew/bin/yt-dlp",
             arguments: [
                 "--paths",
-                "/tmp/Edgar's Clips",
+                "/tmp/Creator's Clips",
                 "https://example.com/watch?v=one&list=two"
             ]
         )
 
         #expect(
             rendered
-                == "'/opt/homebrew/bin/yt-dlp' '--paths' '/tmp/Edgar'\"'\"'s Clips' 'https://example.com/watch?v=one&list=two'"
+                == "'/opt/homebrew/bin/yt-dlp' '--paths' '/tmp/Creator'\"'\"'s Clips' 'https://example.com/watch?v=one&list=two'"
         )
     }
 

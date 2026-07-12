@@ -14,11 +14,11 @@ large queue manager.
 
 ## Status
 
-`0.2.0-preview` is the current stabilization target. The source workflow is
-functional and covered by core tests; public distribution still depends on an
-Apple Developer ID certificate, successful notarization, and the repository's
-external GitHub security settings. Preview builds should be treated as early
-software.
+`0.2.0-preview` is the current public prerelease. The downloadable DMG is
+ad-hoc signed and is not notarized by Apple, so verify its attached SHA-256
+checksum and expect macOS to require an explicit trust decision before opening
+it. Developer ID signing and notarization remain requirements for a stable
+distribution. Preview builds should be treated as early software.
 
 ## Workflow
 
@@ -36,6 +36,8 @@ configuration, and terminates command options before passing the URL.
 ## Features
 
 - Native SwiftUI and AppKit macOS interface
+- Recommendation-first Liquid Orbit workflow with native macOS 26 Liquid Glass
+  and adaptive material fallbacks on macOS 14 and later
 - Real `yt-dlp` JSON analysis before download
 - Review of formats, subtitles, output compatibility, and local tool readiness
 - Presets for best video, 1080p MP4, audio-only, and explicit format selection
@@ -45,6 +47,7 @@ configuration, and terminates command options before passing the URL.
 - Live progress, cancellation, and readable recovery guidance
 - Session-only recent links and redacted completion receipts
 - Visible effective arguments before execution
+- General-purpose Editing, Audio, Archive, and Short Clips workflows
 
 ## Requirements
 

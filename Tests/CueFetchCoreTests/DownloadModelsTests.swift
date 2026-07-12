@@ -13,10 +13,11 @@ struct DownloadModelsTests {
     @Test func builtInDownloadProfilesCoverCoreWorkflows() {
         let profiles = DownloadProfile.all
 
-        #expect(profiles.map(\.id) == ["editing", "audio", "archive", "sermon-clips"])
+        #expect(profiles.map(\.id) == ["editing", "audio", "archive", "short-clips"])
         #expect(profiles.contains { $0.preset == .audioOnly && !$0.includeSubtitles })
         #expect(profiles.contains { $0.preset == .bestVideo && $0.includeSubtitles })
         #expect(profiles.allSatisfy { $0.destination.hasPrefix("~/Downloads/CueFetch") })
+        #expect(DownloadProfile.profile(id: "sermon-clips")?.id == "short-clips")
     }
 
     @Test func defaultQuickTimeSelectorsContainNoPermissiveAudioFallback() {

@@ -12,7 +12,7 @@ struct PreflightPane: View {
                 EmptyPreflightPane(store: store)
             }
         }
-        .background(Color.white)
+        .background(CueFetchTheme.page)
     }
 }
 
@@ -720,7 +720,7 @@ private struct ProfileSection: View {
         case "editing": "film"
         case "audio": "waveform"
         case "archive": "externaldrive"
-        case "sermon-clips": "rectangle.stack"
+        case "short-clips": "rectangle.stack"
         default: "slider.horizontal.3"
         }
     }

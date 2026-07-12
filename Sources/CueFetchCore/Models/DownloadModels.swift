@@ -105,17 +105,18 @@ public struct DownloadProfile: Identifiable, Equatable, Sendable {
             includeSubtitles: true
         ),
         DownloadProfile(
-            id: "sermon-clips",
-            name: "Sermon Clips",
-            summary: "1080p MP4 for reels",
-            destination: "~/Downloads/CueFetch/Sermon Clips",
+            id: "short-clips",
+            name: "Short Clips",
+            summary: "1080p MP4 for short-form edits",
+            destination: "~/Downloads/CueFetch/Short Clips",
             preset: .mp4FullHD,
             includeSubtitles: true
         )
     ]
 
     public static func profile(id: String) -> DownloadProfile? {
-        all.first { $0.id == id }
+        let migratedID = id == "sermon-clips" ? "short-clips" : id
+        return all.first { $0.id == migratedID }
     }
 }
 

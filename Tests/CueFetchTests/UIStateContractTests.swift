@@ -59,6 +59,64 @@ struct UIStateContractTests {
         #expect(!empty.isAnalyzeEnabled)
     }
 
+    @Test("Liquid orbit keeps compatible MP4 as the recommended operation")
+    func liquidOrbitRecommendedOutput() {
+        let summary = OrbitOutputSummary.make(
+            preset: .mp4FullHD,
+            selectedFormat: nil
+        )
+
+        #expect(summary.title == "1080p MP4")
+        #expect(summary.detail == "Video + audio · works in most apps")
+        #expect(summary.sizeLabel == "Calculated during download")
+    }
+
+    @Test("Liquid orbit quality stops come from reported formats")
+    func liquidOrbitQualityStops() {
+        let low = MediaFormat(
+            quality: "720p",
+            container: "MP4",
+            videoCodec: "H.264",
+            audio: "AAC",
+            estimatedSize: "42 MB",
+            subtitles: false,
+            compatibilityKind: .quickTime,
+            selection: .video(formatSelector: "22", mergeOutputFormat: nil),
+            pixelWidth: 1280,
+            pixelHeight: 720
+        )
+        let high = MediaFormat(
+            quality: "2160p",
+            container: "WEBM",
+            videoCodec: "AV1",
+            audio: "Separate audio",
+            estimatedSize: "420 MB",
+            subtitles: false,
+            compatibilityKind: .requiresConversion,
+            selection: .video(formatSelector: "401+251", mergeOutputFormat: "webm"),
+            pixelWidth: 3840,
+            pixelHeight: 2160
+        )
+        let candidate = DownloadCandidate(
+            title: "Field Notes",
+            url: "https://example.com/field-notes",
+            domain: "example.com",
+            duration: "4:32",
+            published: "Today",
+            thumbnailName: "",
+            site: .generic,
+            accessState: .available,
+            formats: [low, high]
+        )
+
+        let choices = OrbitQualityChoiceBuilder.choices(for: candidate)
+
+        #expect(choices.map(\.label) == ["720p", "1080p", "4K"])
+        #expect(choices[0].selection == .format(low.id))
+        #expect(choices[1].selection == .preset(.mp4FullHD))
+        #expect(choices[2].selection == .format(high.id))
+    }
+
     @Test("Missing yt-dlp leaves analysis in a truthful blocked state")
     @MainActor
     func missingYTDLPBlocksAnalysis() {

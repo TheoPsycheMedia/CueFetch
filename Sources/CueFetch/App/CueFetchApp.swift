@@ -4,8 +4,8 @@ import SwiftUI
 enum CueFetchWindowMetrics {
     static let minimumWidth: CGFloat = 960
     static let minimumHeight: CGFloat = 660
-    static let preferredWidth: CGFloat = 1040
-    static let preferredHeight: CGFloat = 720
+    static let preferredWidth: CGFloat = 1120
+    static let preferredHeight: CGFloat = 760
 
     static var minimumContentSize: NSSize {
         NSSize(width: minimumWidth, height: minimumHeight)
@@ -73,7 +73,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 minWidth: CueFetchWindowMetrics.minimumWidth,
                 minHeight: CueFetchWindowMetrics.minimumHeight
             )
-            .preferredColorScheme(.light)
 
         let window = NSWindow(
             contentRect: targetFrame,

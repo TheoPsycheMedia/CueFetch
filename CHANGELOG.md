@@ -4,7 +4,7 @@ Notable user-facing changes are recorded here. CueFetch follows semantic
 versioning for the numeric release and appends `-preview` while the distribution
 contract is still stabilizing.
 
-## 0.2.0-preview
+## 0.2.0-preview - 2026-07-12
 
 Trust and release stabilization preview.
 
@@ -25,6 +25,12 @@ Trust and release stabilization preview.
 - Optional Developer ID signing and Keychain-backed Apple notarization flow
 - Architecture, roadmap, release, security-design, contribution, and community
   documentation
+- A recommendation-first Liquid Orbit interface for link analysis, output
+  selection, destination review, and download progress
+- Native macOS 26 Liquid Glass surfaces and controls, with adaptive material
+  fallbacks that preserve macOS 14 and later support
+- Source-derived quality stops and an advanced Download Details sheet for exact
+  codecs, conversion warnings, profiles, captions, and recovery controls
 
 ### Changed
 
@@ -40,6 +46,13 @@ Trust and release stabilization preview.
 - Legal notices ship inside both the app bundle and DMG
 - Subprocesses receive a constrained environment
 - CI enforces at least 80% line coverage for `CueFetchCore`
+- Compatible 1080p MP4 is presented as the recommended video path while explicit
+  higher-resolution and custom choices remain available
+- The built-in personalized clip workflow is now the general-purpose Short Clips
+  profile
+- The public app bundle identifier is now `com.theopsychemedia.CueFetch`. macOS
+  may treat this as a separate app from `0.1.0-preview`, so preferences from that
+  preview might not carry forward automatically
 
 ### Security
 
