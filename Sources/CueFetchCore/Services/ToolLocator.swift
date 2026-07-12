@@ -10,6 +10,19 @@ public enum ToolLocator {
         "/sbin"
     ]
 
+    private static let allowedEnvironmentKeys = [
+        "HOME",
+        "TMPDIR",
+        "LANG",
+        "LC_ALL",
+        "LC_CTYPE",
+        "SSL_CERT_FILE",
+        "SSL_CERT_DIR",
+        "CURL_CA_BUNDLE",
+        "REQUESTS_CA_BUNDLE",
+        "XDG_CACHE_HOME"
+    ]
+
     public static func status() -> ToolStatus {
         let ytdlp = locate("yt-dlp")
         let ffmpeg = locate("ffmpeg")
@@ -85,9 +98,16 @@ public enum ToolLocator {
         return output.isEmpty ? nil : output
     }
 
-    public static func processEnvironment() -> [String: String] {
-        var environment = ProcessInfo.processInfo.environment
-        let existingPath = environment["PATH"] ?? ""
+    public static func processEnvironment(
+        from inherited: [String: String] = ProcessInfo.processInfo.environment
+    ) -> [String: String] {
+        var environment = allowedEnvironmentKeys.reduce(into: [String: String]()) { result, key in
+            if let value = inherited[key], !value.isEmpty {
+                result[key] = value
+            }
+        }
+
+        let existingPath = inherited["PATH"] ?? ""
         let pathParts = commonSearchDirectories + existingPath
             .split(separator: ":")
             .map(String.init)

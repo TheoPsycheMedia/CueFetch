@@ -4,59 +4,83 @@
 
 # CueFetch
 
-CueFetch is a native macOS preflight app for `yt-dlp`. Paste a media URL, inspect
-the detected title, thumbnail, formats, subtitles, access state, destination, and
-exact command, then download with confidence.
+CueFetch is a native macOS preflight app for `yt-dlp`. Paste an HTTP(S) media
+URL, inspect the detected title, formats, subtitles, access state, destination,
+and effective command, then download with confidence.
 
-It is built for people who trust `yt-dlp` but do not want every download to begin
-in Terminal: creators, editors, researchers, ministry teams, archivists, and
-anyone who needs a calmer review step before saving media locally.
+The product has one lane: make the important decisions visible before a local
+download starts. It is not intended to become a browser, media library, or
+large queue manager.
 
-## Why CueFetch
+## Status
 
-Most downloader front-ends either expose too little before download or grow into
-large queue managers. CueFetch focuses on one careful workflow:
+`0.2.0-preview` is the current public prerelease. The downloadable DMG is
+ad-hoc signed and is not notarized by Apple, so verify its attached SHA-256
+checksum and expect macOS to require an explicit trust decision before opening
+it. Developer ID signing and notarization remain requirements for a stable
+distribution. Preview builds should be treated as early software.
 
-1. Paste a link.
-2. Analyze it with the user's local `yt-dlp`.
-3. Review metadata, formats, subtitles, and access warnings.
+## Workflow
+
+1. Paste one HTTP(S) media link.
+2. Analyze it with the user's installed `yt-dlp`.
+3. Review real metadata, formats, subtitles, access warnings, and local tools.
 4. Choose a destination and output preset.
-5. Run the visible command.
+5. Run the exact validated plan shown by CueFetch.
+6. Inspect the completion receipt and reveal the resulting file in Finder.
 
-The goal is not to replace `yt-dlp`. The goal is to make the important decision
-points visible before anything lands on disk.
+CueFetch rejects option-like or malformed input, prevents a single-item review
+from silently expanding into a playlist, ignores ambient `yt-dlp`
+configuration, and terminates command options before passing the URL.
 
 ## Features
 
-- Native SwiftUI/AppKit macOS app
+- Native SwiftUI and AppKit macOS interface
+- Recommendation-first Liquid Orbit workflow with native macOS 26 Liquid Glass
+  and adaptive material fallbacks on macOS 14 and later
 - Real `yt-dlp` JSON analysis before download
-- Format review for video, audio, subtitles, estimated size, and compatibility
-- Presets for best video, 1080p MP4, audio-only, and custom format selection
-- Destination folder picker with Finder reveal after download
-- Optional Safari cookie handoff through `yt-dlp` for authorized access
-- Live progress parsing, cancellation, and readable failure states
-- Local tool detection for `yt-dlp` and FFmpeg
-- Command preview so users can see what CueFetch will run
+- Review of formats, subtitles, output compatibility, and local tool readiness
+- Presets for best video, 1080p MP4, audio-only, and explicit format selection
+- User-selected destination with Finder reveal
+- Per-job Safari cookie access for media the user is authorized to access
+- Structured running, succeeded, failed, and cancelled states
+- Live progress, cancellation, and readable recovery guidance
+- Session-only recent links and redacted completion receipts
+- Visible effective arguments before execution
+- General-purpose Editing, Audio, Archive, and Short Clips workflows
 
 ## Requirements
 
 - macOS 14 or newer
-- Xcode command line tools or Xcode
-- `yt-dlp` installed on the user's PATH
-- FFmpeg recommended for merging/remuxing formats
+- Apple silicon (`arm64`) or Intel (`x86_64`) Mac
+- `yt-dlp` installed locally
+- FFmpeg required by the standard video and audio presets and any selected
+  format that needs merging; direct progressive custom formats do not use it
+- Xcode command line tools or Xcode when building from source
 
-Install the tools with Homebrew:
+Install the external tools with Homebrew:
 
 ```bash
 brew install yt-dlp ffmpeg
 ```
 
-## Download
+CueFetch invokes these tools; it does not vendor or update them.
 
-Preview builds are published on the
+## Install And Update
+
+When preview DMGs are published, they appear on the
 [GitHub Releases page](https://github.com/TheoPsycheMedia/CueFetch/releases).
-Early DMGs may be unsigned unless the release notes explicitly say they are
-signed and notarized.
+Check the specific release note for its signing and notarization status, then
+verify the downloaded checksum before opening it:
+
+```bash
+shasum -a 256 -c CueFetch-0.2.0-preview.dmg.sha256
+```
+
+CueFetch does not currently self-update. To update the app, download the newer
+DMG, quit CueFetch, and replace the copy in `/Applications`. Update `yt-dlp` and
+FFmpeg separately through the package manager that installed them; with
+Homebrew, use `brew upgrade yt-dlp ffmpeg`.
 
 ## Run From Source
 
@@ -66,55 +90,89 @@ cd CueFetch
 ./script/build_and_run.sh
 ```
 
-Run verification:
+Run focused verification:
 
 ```bash
 swift test
+swift build --configuration release
 ./script/build_and_run.sh --verify
 ```
 
-Build a local DMG:
+`--verify` launches a locally built app and therefore requires a graphical
+macOS session. CI runs tests, coverage reporting, a release build, and universal
+DMG packaging on every pull request and push to `main`; CueFetchCore line
+coverage must remain at or above 80%.
+
+## Release Packaging
+
+Build an ad-hoc-signed universal DMG:
 
 ```bash
 ./script/build_and_run.sh --dmg
 ```
 
-To sign a local build, provide a codesigning identity:
+The release mode refuses a dirty worktree, runs the test suite, verifies both
+architectures, validates the app signature strictly, includes the license and
+notices in both the app and DMG, and writes a SHA-256 file plus factual release
+notes under `dist/`.
+
+Developer ID signing and notarization are opt-in. They require a certificate in
+the local Keychain and a `notarytool` Keychain profile; no Apple credentials are
+stored in this repository or passed as command-line secrets:
 
 ```bash
-CUEFETCH_SIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)" ./script/build_and_run.sh --dmg
+CUEFETCH_SIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)" \
+CUEFETCH_NOTARY_PROFILE="CueFetch-notary" \
+./script/build_and_run.sh --notarize
 ```
 
-## Current Status
+See [docs/RELEASING.md](docs/RELEASING.md) for the full checklist. A successful
+local package does not enable GitHub branch protection, private vulnerability
+reporting, Apple certificates, or notarization credentials; those remain
+external maintainer gates.
 
-CueFetch is an early preview. The core workflow is working locally, but public
-release packaging, signing, notarization, and broader QA are still future work.
-Expect sharp edges while the app is young.
+## Local Data And Privacy
+
+CueFetch is a single-user local app. Download preferences are stored in macOS
+`UserDefaults`. Recent links, including the full URL needed to reselect one, stay
+in memory for the current app session only; they are not persisted, and legacy
+persisted link history is removed at launch. Completion receipts remove URL user
+information and fragments, replace query values, abbreviate paths under the home
+folder, and never include browser cookie values.
+
+Safari cookie access is off by default and scoped to the job where the user
+explicitly enables it. CueFetch never reads or stores cookie values itself; it
+asks the local `yt-dlp` process to access Safari's cookie store. Tool processes
+receive a constrained environment rather than the app's complete inherited
+environment.
+
+Downloaded media and its filesystem metadata remain in the destination the
+user chose. Anyone with access to the Mac account, its backups, clipboard, or
+download destination may still see local data, so private media should be
+handled according to the Mac's own account and disk security.
+
+See [SECURITY.md](SECURITY.md) and
+[docs/SECURITY-DESIGN.md](docs/SECURITY-DESIGN.md) for reporting and trust
+boundaries.
+
+## Project Documentation
+
+- [Architecture](docs/ARCHITECTURE.md)
+- [Roadmap](docs/ROADMAP.md)
+- [Release process](docs/RELEASING.md)
+- [Security design](docs/SECURITY-DESIGN.md)
+- [Contributing](CONTRIBUTING.md)
 
 ## Legal And Responsible Use
 
-CueFetch is an independent wrapper that invokes external tools installed on the
-user's Mac. It does not vendor, fork, modify, or redistribute `yt-dlp` or FFmpeg.
+CueFetch is an independent wrapper around tools installed by the user. It is
+not affiliated with `yt-dlp`, FFmpeg, YouTube, Vimeo, TikTok, X, or any other
+supported site. CueFetch does not bypass DRM.
 
-- `yt-dlp` is released under the Unlicense.
-- FFmpeg is licensed primarily under LGPL v2.1+, with optional GPL components
-  depending on build configuration.
-- CueFetch is not affiliated with `yt-dlp`, FFmpeg, YouTube, Vimeo, TikTok, X, or
-  any other supported site.
-
-Users are responsible for complying with copyright law, platform terms, and their
-own access rights. CueFetch is intended for media the user is authorized to
-download, archive, or transform. CueFetch does not bypass DRM.
+Users are responsible for complying with copyright law, platform terms, and
+their own access rights. Use CueFetch only for media you are authorized to
+download, archive, or transform.
 
 See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) and [NOTICE](NOTICE) for
-third-party attribution.
-
-## Similar Projects
-
-The `yt-dlp` ecosystem already has capable front-ends, including Open Video
-Downloader, MacYTDL, Parabolic, Seal, and YTDLnis. CueFetch's lane is narrower:
-a Mac-native, review-before-download workflow with a visible command surface.
-
-## License
-
-CueFetch is licensed under the [Apache License 2.0](LICENSE).
+third-party attribution. CueFetch is licensed under the
+[Apache License 2.0](LICENSE).

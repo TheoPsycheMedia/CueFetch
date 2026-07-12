@@ -100,7 +100,7 @@ struct SettingsView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Settings")
                         .font(.system(size: 22, weight: .semibold))
-                    Text("Configure downloads, tools, and history.")
+                    Text("Configure downloads, tools, privacy, and session history.")
                         .font(.system(size: 13))
                         .foregroundStyle(.secondary)
                 }
@@ -127,6 +127,7 @@ struct SettingsView: View {
                             } label: {
                                 Label("Change Folder", systemImage: "folder")
                             }
+                            .disabled(store.isDownloading)
 
                             Button {
                                 store.openDestinationFolder()
@@ -137,17 +138,55 @@ struct SettingsView: View {
                             Spacer()
                         }
 
-                        Toggle("Download subtitles by default", isOn: $store.includeSubtitles)
+                        Toggle("Download subtitles by default", isOn: Binding(
+                            get: { store.includeSubtitles },
+                            set: { store.setIncludeSubtitles($0) }
+                        ))
                             .toggleStyle(.switch)
-                            .onChange(of: store.includeSubtitles) {
-                                store.updateCommandPreview()
+                            .disabled(store.isDownloading)
+
+                        Toggle("Use Safari cookies for the current link", isOn: Binding(
+                            get: { store.useBrowserCookies },
+                            set: { store.setUseBrowserCookies($0) }
+                        ))
+                            .toggleStyle(.switch)
+                            .disabled(store.isDownloading)
+
+                        Text("Cookie access is never persisted and resets when you change links or finish a download.")
+                            .font(.system(size: 12))
+                            .foregroundStyle(.secondary)
+                    }
+
+                    SettingsSection(title: "Profiles") {
+                        ForEach(DownloadProfile.all) { profile in
+                            HStack(alignment: .center, spacing: 10) {
+                                Image(systemName: settingsProfileIcon(for: profile.id))
+                                    .font(.system(size: 15, weight: .semibold))
+                                    .foregroundStyle(profile.id == store.selectedProfileID ? CueFetchTheme.blue : .secondary)
+                                    .frame(width: 22)
+
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(profile.name)
+                                        .font(.system(size: 14, weight: .semibold))
+                                    Text("\(profile.summary) -> \(profile.destination)")
+                                        .font(.system(size: 12))
+                                        .foregroundStyle(.secondary)
+                                        .lineLimit(1)
+                                        .truncationMode(.middle)
+                                }
+
+                                Spacer()
+
+                                Button(profile.id == store.selectedProfileID ? "Applied" : "Apply") {
+                                    store.applyProfile(profile)
+                                }
+                                .disabled(profile.id == store.selectedProfileID || store.isDownloading)
                             }
 
-                        Toggle("Use Safari cookies when needed", isOn: $store.useBrowserCookies)
-                            .toggleStyle(.switch)
-                            .onChange(of: store.useBrowserCookies) {
-                                store.updateCommandPreview()
+                            if profile.id != DownloadProfile.all.last?.id {
+                                Divider()
                             }
+                        }
                     }
 
                     SettingsSection(title: "Tools") {
@@ -176,10 +215,27 @@ struct SettingsView: View {
                         LegalParagraph(
                             "Use CueFetch only for media you are authorized to access, download, archive, or transform. CueFetch does not bypass DRM."
                         )
+
+                        HStack(spacing: 10) {
+                            Button("License") {
+                                store.openBundledLegalDocument(named: "LICENSE")
+                            }
+                            Button("Notice") {
+                                store.openBundledLegalDocument(named: "NOTICE")
+                            }
+                            Button("Third-Party Notices") {
+                                store.openBundledLegalDocument(named: "THIRD_PARTY_NOTICES")
+                            }
+                            Spacer()
+                        }
                     }
 
                     SettingsSection(title: "History") {
-                        SettingLine(title: "Recent links", value: "\(store.recentLinks.count)")
+                        SettingLine(title: "Session links", value: "\(store.recentLinks.count)")
+
+                        LegalParagraph(
+                            "Recent URLs stay in memory for this app session only. CueFetch removes legacy persisted history at launch."
+                        )
 
                         HStack {
                             Button(role: .destructive) {
@@ -197,6 +253,16 @@ struct SettingsView: View {
             }
         }
         .background(CueFetchTheme.page)
+    }
+
+    private func settingsProfileIcon(for id: String) -> String {
+        switch id {
+        case "editing": "film"
+        case "audio": "waveform"
+        case "archive": "externaldrive"
+        case "short-clips": "rectangle.stack"
+        default: "slider.horizontal.3"
+        }
     }
 }
 

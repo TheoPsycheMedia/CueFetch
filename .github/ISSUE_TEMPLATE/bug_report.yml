@@ -1,0 +1,60 @@
+name: Bug report
+description: Report a reproducible CueFetch problem without sharing private media data.
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not include private URLs, cookies, credentials, or copyrighted media. Security issues belong in a private report under the repository Security tab.
+  - type: input
+    id: version
+    attributes:
+      label: CueFetch version
+      description: Find the version in the app bundle or release notes.
+      placeholder: 0.2.0-preview (build 2)
+    validations:
+      required: true
+  - type: input
+    id: macos
+    attributes:
+      label: macOS and Mac architecture
+      placeholder: macOS 14.6, Apple silicon
+    validations:
+      required: true
+  - type: textarea
+    id: tools
+    attributes:
+      label: Local tool versions
+      description: Include `yt-dlp --version` and `ffmpeg -version` when relevant.
+      render: text
+  - type: textarea
+    id: steps
+    attributes:
+      label: Reproduction steps
+      description: Use a public test URL or redact the URL completely.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected result
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual result
+      description: Paste only logs you have checked for private paths, URLs, and cookie data.
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I tested the latest preview or current `main` branch.
+          required: true
+        - label: I removed private URLs, cookies, credentials, and personal filesystem paths.
+          required: true

@@ -10,17 +10,39 @@ struct FormatTableView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Available formats")
-                .font(.system(size: 15, weight: .semibold))
+            HStack(spacing: 10) {
+                Text("Available formats")
+                    .font(.system(size: 15, weight: .semibold))
 
-            ScrollView {
-                ViewThatFits(in: .horizontal) {
-                    FullFormatTable(store: store)
-                    CompactFormatList(store: store)
-                }
+                Spacer()
+
+                Label("Best use", systemImage: "sparkles")
+                    .font(.system(size: 11.5, weight: .medium))
+                    .foregroundStyle(CueFetchTheme.blue)
+                    .labelStyle(.titleAndIcon)
             }
-            .scrollIndicators(.visible)
-            .frame(minHeight: 208, idealHeight: 214, maxHeight: 214)
+
+            if formats.isEmpty {
+                HStack(spacing: 10) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(CueFetchTheme.orange)
+                    Text("No downloadable formats were reported for this item.")
+                        .font(.system(size: 13))
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                }
+                .padding(14)
+                .cuePanel(radius: 7)
+            } else {
+                ScrollView {
+                    ViewThatFits(in: .horizontal) {
+                        FullFormatTable(store: store)
+                        CompactFormatList(store: store)
+                    }
+                }
+                .scrollIndicators(.visible)
+                .frame(minHeight: 172, idealHeight: 190, maxHeight: 214)
+            }
         }
     }
 }
@@ -41,10 +63,10 @@ private struct FullFormatTable: View {
                     format: format,
                     selected: format.id == store.selectedFormatID,
                     action: {
-                        store.selectedFormatID = format.id
-                        store.updateCommandPreview()
+                        store.selectFormat(id: format.id)
                     }
                 )
+                .disabled(store.isDownloading)
 
                 if format.id != formats.last?.id {
                     Divider()
@@ -66,8 +88,7 @@ private struct CompactFormatList: View {
         VStack(spacing: 0) {
             ForEach(formats) { format in
                 Button {
-                    store.selectedFormatID = format.id
-                    store.updateCommandPreview()
+                    store.selectFormat(id: format.id)
                 } label: {
                     HStack(spacing: 12) {
                         Circle()
@@ -90,10 +111,7 @@ private struct CompactFormatList: View {
                             Text(format.estimatedSize)
                                 .font(.system(size: 12.5, weight: .medium))
                                 .lineLimit(1)
-                            Label("QuickTime", systemImage: "checkmark.circle")
-                                .font(.system(size: 11))
-                                .foregroundStyle(CueFetchTheme.green)
-                                .labelStyle(.titleAndIcon)
+                            FormatRecommendationBadge(format: format)
                         }
                     }
                     .padding(.horizontal, 12)
@@ -102,6 +120,7 @@ private struct CompactFormatList: View {
                     .background(format.id == store.selectedFormatID ? CueFetchTheme.blueSoft.opacity(0.55) : Color.clear)
                 }
                 .buttonStyle(.plain)
+                .disabled(store.isDownloading)
 
                 if format.id != formats.last?.id {
                     Divider()
@@ -123,7 +142,7 @@ private struct FormatHeaderRow: View {
             TableHeading("Audio", width: 112)
             TableHeading("Estimated size", width: 100)
             TableHeading("Subtitles", width: 72)
-            TableHeading("Compatibility", width: 135)
+            TableHeading("Best use", width: 135)
             Spacer()
         }
         .font(.system(size: 12, weight: .medium))
@@ -169,17 +188,8 @@ private struct FormatRow: View {
                 TableCell(format.audio, width: 112)
                 TableCell(format.estimatedSize, width: 100)
                 TableCell(format.subtitles ? "Yes" : "-", width: 72)
-
-                HStack(spacing: 10) {
-                    Text(format.compatibility)
-                        .lineLimit(2)
-                    Image(systemName: "checkmark.circle")
-                        .foregroundStyle(CueFetchTheme.green)
-                    Image(systemName: "chevron.down")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(.secondary)
-                }
-                .frame(width: 135, alignment: .leading)
+                FormatRecommendationCell(format: format)
+                    .frame(width: 135, alignment: .leading)
 
                 Spacer()
             }
@@ -190,6 +200,104 @@ private struct FormatRow: View {
             .background(selected ? CueFetchTheme.blueSoft.opacity(0.55) : Color.clear)
         }
         .buttonStyle(.plain)
+    }
+}
+
+private struct FormatRecommendation {
+    let label: String
+    let detail: String
+    let systemImage: String
+    let color: Color
+}
+
+private extension MediaFormat {
+    var recommendation: FormatRecommendation {
+        if !isCueFetchCompatible {
+            return FormatRecommendation(
+                label: "Convert",
+                detail: "May need conversion",
+                systemImage: "exclamationmark.triangle.fill",
+                color: CueFetchTheme.orange
+            )
+        }
+
+        if isAudioOnly {
+            return FormatRecommendation(
+                label: "Audio pick",
+                detail: "Music-ready file",
+                systemImage: "waveform",
+                color: CueFetchTheme.green
+            )
+        }
+
+        if quality.contains("1080p") {
+            return FormatRecommendation(
+                label: "Editor pick",
+                detail: "Balanced MP4",
+                systemImage: "checkmark.seal.fill",
+                color: CueFetchTheme.green
+            )
+        }
+
+        if quality.contains("2160p") || quality.contains("1440p") || quality.contains("4K") {
+            return FormatRecommendation(
+                label: "Archive",
+                detail: "Highest detail",
+                systemImage: "externaldrive.fill",
+                color: CueFetchTheme.blue
+            )
+        }
+
+        return FormatRecommendation(
+            label: "Smaller file",
+            detail: "Quick transfer",
+            systemImage: "arrow.down.circle.fill",
+            color: CueFetchTheme.blue
+        )
+    }
+
+    private var isCueFetchCompatible: Bool {
+        compatibilityKind != .requiresConversion
+    }
+}
+
+private struct FormatRecommendationBadge: View {
+    let format: MediaFormat
+
+    var body: some View {
+        let recommendation = format.recommendation
+
+        Label(recommendation.label, systemImage: recommendation.systemImage)
+            .font(.system(size: 11, weight: .medium))
+            .foregroundStyle(recommendation.color)
+            .lineLimit(1)
+            .labelStyle(.titleAndIcon)
+    }
+}
+
+private struct FormatRecommendationCell: View {
+    let format: MediaFormat
+
+    var body: some View {
+        let recommendation = format.recommendation
+
+        HStack(spacing: 8) {
+            Image(systemName: recommendation.systemImage)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(recommendation.color)
+                .frame(width: 16)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(recommendation.label)
+                    .font(.system(size: 12.5, weight: .semibold))
+                    .lineLimit(1)
+                Text(recommendation.detail)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+        }
+        .accessibilityElement(children: .combine)
     }
 }
 

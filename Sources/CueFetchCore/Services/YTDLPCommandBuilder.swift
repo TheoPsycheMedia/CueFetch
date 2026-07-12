@@ -1,61 +1,75 @@
 import Foundation
 
 public enum YTDLPCommandBuilder {
-    public static func analyzeArguments(for url: String) -> [String] {
-        [
+    public static let finalPathMarker = "__CUEFETCH_FINAL_PATH__:"
+
+    public static func analyzeArguments(
+        for url: ValidatedMediaURL,
+        useBrowserCookies: Bool = false
+    ) -> [String] {
+        var arguments = [
+            "--ignore-config",
             "--dump-single-json",
             "--no-warnings",
             "--skip-download",
-            url
+            "--no-playlist"
         ]
+
+        appendCookieArguments(to: &arguments, useBrowserCookies: useBrowserCookies)
+        arguments += ["--", url.string]
+        return arguments
     }
 
-    public static func downloadArguments(for options: DownloadOptions) -> [String] {
+    public static func downloadArguments(for plan: DownloadPlan) -> [String] {
         var arguments: [String] = [
+            "--ignore-config",
             "--newline",
             "--progress",
+            "--no-playlist",
             "--restrict-filenames",
-            "--paths", options.destination,
-            "--output", "%(title)s [%(id)s].%(ext)s"
+            "--paths", plan.destination,
+            "--output", "%(title)s [%(id)s].%(ext)s",
+            "--print", "after_move:\(finalPathMarker)%(filepath)s"
         ]
 
-        switch options.preset {
-        case .bestVideo:
+        switch plan.effectiveSelection {
+        case let .selectedFormat(selection):
+            arguments += ["--format", selection.formatSelector]
+            if let mergeOutputFormat = selection.mergeOutputFormat {
+                arguments += ["--merge-output-format", mergeOutputFormat]
+            }
+        case let .fixedQuickTimeMP4(maximumHeight):
             arguments += [
-                "--format", options.format.ytDLPFormat,
+                "--format", DefaultMediaFormats.quickTimeMP4Selector(maxHeight: maximumHeight),
                 "--merge-output-format", "mp4"
             ]
-        case .mp4FullHD:
+        case .fixedM4A:
             arguments += [
-                "--format", "bv*[height<=1080][ext=mp4]+ba[ext=m4a]/b[height<=1080][ext=mp4]/b",
-                "--merge-output-format", "mp4"
-            ]
-        case .audioOnly:
-            arguments += [
+                "--format", "bestaudio",
                 "--extract-audio",
                 "--audio-format", "m4a",
                 "--audio-quality", "0"
             ]
-        case .custom:
-            arguments += ["--format", options.format.ytDLPFormat]
         }
 
-        if options.includeSubtitles {
+        if plan.includeSubtitles {
             arguments += [
                 "--write-subs",
                 "--write-auto-subs",
-                "--sub-langs", "all,-live_chat"
+                "--sub-langs", plan.subtitleLanguages
             ]
         }
 
-        if options.useBrowserCookies {
-            arguments += [
-                "--cookies-from-browser",
-                "safari"
-            ]
-        }
-
-        arguments.append(options.url)
+        appendCookieArguments(to: &arguments, useBrowserCookies: plan.useBrowserCookies)
+        arguments += ["--", plan.url.string]
         return arguments
+    }
+
+    private static func appendCookieArguments(
+        to arguments: inout [String],
+        useBrowserCookies: Bool
+    ) {
+        guard useBrowserCookies else { return }
+        arguments += ["--cookies-from-browser", "safari"]
     }
 }

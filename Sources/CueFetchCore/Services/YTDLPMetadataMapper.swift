@@ -6,6 +6,7 @@ public enum YTDLPMetadataMapper {
         let domain = domainName(for: url)
         let site = SiteKind(domain: domain.isEmpty ? (metadata.extractorKey ?? metadata.extractor ?? "") : domain)
         let hasSubtitles = !(metadata.subtitles ?? [:]).isEmpty || !(metadata.automaticCaptions ?? [:]).isEmpty
+        let subtitleLanguages = subtitleLanguages(from: metadata)
         let formats = mediaFormats(from: metadata.formats ?? [], hasSubtitles: hasSubtitles)
 
         return DownloadCandidate(
@@ -18,41 +19,44 @@ public enum YTDLPMetadataMapper {
             thumbnailURL: metadata.thumbnail,
             site: site,
             accessState: .available,
-            formats: formats.isEmpty ? DefaultMediaFormats.all : formats
+            formats: formats,
+            subtitleLanguages: subtitleLanguages
         )
     }
 
     public static func mediaFormats(from formats: [YTDLPFormat], hasSubtitles: Bool) -> [MediaFormat] {
-        let preferredHeights = [2160, 1440, 1080, 720, 480]
-        var rows: [MediaFormat] = []
-
-        for height in preferredHeights {
-            guard let format = bestVideoFormat(for: height, in: formats) else {
-                continue
+        var rows = representativeVideoFormats(from: formats).compactMap { format -> MediaFormat? in
+            guard let height = format.height,
+                  let formatID = format.formatID,
+                  !formatID.isEmpty
+            else {
+                return nil
             }
 
             let ext = (format.ext ?? "mp4").uppercased()
             let codec = simplifiedCodec(format.vcodec)
-            let audio = format.acodec == "none" ? "Best audio" : simplifiedAudio(format.acodec, abr: format.abr)
+            let audio = format.acodec == "none" ? "Separate audio" : simplifiedAudio(format.acodec, abr: format.abr)
             let estimated = format.filesize ?? format.filesizeApprox
-            let formatID = format.formatID ?? "bestvideo"
+            let compatibility = compatibility(for: format)
 
-            rows.append(
-                MediaFormat(
-                    quality: height >= 2160 ? "\(height)p (4K)" : "\(height)p" + (height == 1080 ? " (Full HD)" : height == 720 ? " (HD)" : ""),
-                    container: ext,
-                    videoCodec: codec,
-                    audio: audio,
-                    estimatedSize: byteString(estimated),
-                    subtitles: hasSubtitles,
-                    compatibility: ext == "MP4" ? "Compatible with QuickTime" : "May require conversion",
-                    ytDLPFormat: "\(formatID)+bestaudio/best[height<=\(height)]/best",
-                    isAudioOnly: false
-                )
+            return MediaFormat(
+                quality: qualityLabel(width: format.width, height: height),
+                container: ext,
+                videoCodec: codec,
+                audio: audio,
+                estimatedSize: byteString(estimated),
+                subtitles: hasSubtitles,
+                compatibilityKind: compatibility,
+                selection: selection(for: format, formatID: formatID, compatibility: compatibility),
+                pixelWidth: format.width,
+                pixelHeight: height
             )
         }
 
         if let audio = bestAudioFormat(in: formats) {
+            guard let formatID = audio.formatID, !formatID.isEmpty else {
+                return rows
+            }
             rows.append(
                 MediaFormat(
                     quality: "Audio Only",
@@ -61,9 +65,8 @@ public enum YTDLPMetadataMapper {
                     audio: simplifiedAudio(audio.acodec, abr: audio.abr),
                     estimatedSize: byteString(audio.filesize ?? audio.filesizeApprox),
                     subtitles: hasSubtitles,
-                    compatibility: "Compatible with Music",
-                    ytDLPFormat: audio.formatID ?? "bestaudio",
-                    isAudioOnly: true
+                    compatibilityKind: .music,
+                    selection: .audio(formatSelector: formatID)
                 )
             )
         }
@@ -71,33 +74,149 @@ public enum YTDLPMetadataMapper {
         return rows
     }
 
-    private static func bestVideoFormat(for maxHeight: Int, in formats: [YTDLPFormat]) -> YTDLPFormat? {
-        formats
-            .filter { format in
-                guard let height = format.height, height <= maxHeight else { return false }
-                guard format.vcodec != nil, format.vcodec != "none" else { return false }
-                return true
+    private struct VideoKey: Hashable {
+        let width: Int
+        let height: Int
+        let codec: String
+    }
+
+    private static func representativeVideoFormats(from formats: [YTDLPFormat]) -> [YTDLPFormat] {
+        let videos = formats.filter { format in
+            guard format.formatID?.isEmpty == false,
+                  let height = format.height,
+                  height > 0,
+                  let codec = format.vcodec?.lowercased()
+            else {
+                return false
             }
-            .sorted { lhs, rhs in
-                let lhsMP4 = lhs.ext == "mp4" ? 1 : 0
-                let rhsMP4 = rhs.ext == "mp4" ? 1 : 0
-                if lhs.height != rhs.height { return (lhs.height ?? 0) > (rhs.height ?? 0) }
-                if lhsMP4 != rhsMP4 { return lhsMP4 > rhsMP4 }
-                return (lhs.tbr ?? 0) > (rhs.tbr ?? 0)
+            return codec != "none"
+        }
+
+        let representatives = videos.reduce(into: [VideoKey: YTDLPFormat]()) { result, format in
+            let key = VideoKey(
+                width: format.width ?? 0,
+                height: format.height ?? 0,
+                codec: simplifiedCodec(format.vcodec)
+            )
+            guard let current = result[key] else {
+                result[key] = format
+                return
             }
-            .first
+            if representativeScore(format) > representativeScore(current) {
+                result[key] = format
+            }
+        }
+
+        return representatives.values.sorted { lhs, rhs in
+            let lhsPixels = (lhs.width ?? 0) * (lhs.height ?? 0)
+            let rhsPixels = (rhs.width ?? 0) * (rhs.height ?? 0)
+            if lhsPixels != rhsPixels { return lhsPixels > rhsPixels }
+            if lhs.height != rhs.height { return (lhs.height ?? 0) > (rhs.height ?? 0) }
+
+            let lhsCompatibility = compatibility(for: lhs) == .quickTime ? 0 : 1
+            let rhsCompatibility = compatibility(for: rhs) == .quickTime ? 0 : 1
+            if lhsCompatibility != rhsCompatibility { return lhsCompatibility < rhsCompatibility }
+            return simplifiedCodec(lhs.vcodec) < simplifiedCodec(rhs.vcodec)
+        }
+    }
+
+    private static func representativeScore(_ format: YTDLPFormat) -> Double {
+        let quickTimeScore = compatibility(for: format) == .quickTime ? 1_000_000.0 : 0
+        let embeddedAudioScore = hasUsableAudio(format) ? 100_000.0 : 0
+        let mp4Score = format.ext?.lowercased() == "mp4" ? 10_000.0 : 0
+        return quickTimeScore + embeddedAudioScore + mp4Score + (format.tbr ?? 0)
     }
 
     private static func bestAudioFormat(in formats: [YTDLPFormat]) -> YTDLPFormat? {
         formats
-            .filter { ($0.vcodec == "none") && ($0.acodec != nil && $0.acodec != "none") }
+            .filter { format in
+                format.formatID?.isEmpty == false
+                    && format.vcodec == "none"
+                    && format.ext?.lowercased() == "m4a"
+                    && isAAC(format.acodec)
+            }
             .sorted { lhs, rhs in
-                let lhsM4A = lhs.ext == "m4a" ? 1 : 0
-                let rhsM4A = rhs.ext == "m4a" ? 1 : 0
-                if lhsM4A != rhsM4A { return lhsM4A > rhsM4A }
-                return (lhs.abr ?? lhs.tbr ?? 0) > (rhs.abr ?? rhs.tbr ?? 0)
+                (lhs.abr ?? lhs.tbr ?? 0) > (rhs.abr ?? rhs.tbr ?? 0)
             }
             .first
+    }
+
+    private static func compatibility(for format: YTDLPFormat) -> MediaCompatibility {
+        isQuickTimeFriendlyVideo(format) ? .quickTime : .requiresConversion
+    }
+
+    private static func selection(
+        for format: YTDLPFormat,
+        formatID: String,
+        compatibility: MediaCompatibility
+    ) -> MediaFormatSelection {
+        if compatibility == .quickTime {
+            if isAAC(format.acodec) {
+                return .video(
+                    formatSelector: formatID,
+                    mergeOutputFormat: nil
+                )
+            }
+            return .video(
+                formatSelector: DefaultMediaFormats.quickTimeMP4Selector(videoFormatID: formatID),
+                mergeOutputFormat: "mp4"
+            )
+        }
+
+        if hasUsableAudio(format) {
+            return .video(
+                formatSelector: formatID,
+                mergeOutputFormat: nil
+            )
+        }
+
+        return .video(
+            formatSelector: "\(formatID)+bestaudio",
+            mergeOutputFormat: format.ext?.lowercased()
+        )
+    }
+
+    private static func isQuickTimeFriendlyVideo(_ format: YTDLPFormat) -> Bool {
+        guard format.ext?.lowercased() == "mp4" else { return false }
+        let codec = format.vcodec?.lowercased() ?? ""
+        guard codec.hasPrefix("avc1") || codec.contains("h264") else { return false }
+
+        guard hasUsableAudio(format) else { return true }
+        return isAAC(format.acodec)
+    }
+
+    private static func hasUsableAudio(_ format: YTDLPFormat) -> Bool {
+        guard let acodec = format.acodec?.lowercased(), acodec != "none" else {
+            return false
+        }
+        return true
+    }
+
+    private static func isAAC(_ codec: String?) -> Bool {
+        codec?.lowercased().hasPrefix("mp4a.40.") == true
+    }
+
+    private static func qualityLabel(width: Int?, height: Int) -> String {
+        if let width, width > 0, width < height {
+            return "\(width)×\(height) (Vertical)"
+        }
+        if height >= 2160 { return "\(height)p (4K)" }
+        if height == 1080 { return "\(height)p (Full HD)" }
+        if height == 720 { return "\(height)p (HD)" }
+        return "\(height)p"
+    }
+
+    private static func subtitleLanguages(from metadata: YTDLPMetadata) -> [String] {
+        var languages = Set<String>()
+        languages.formUnion((metadata.subtitles ?? [:]).keys)
+        languages.formUnion((metadata.automaticCaptions ?? [:]).keys)
+        return languages
+            .filter { !$0.isEmpty && $0 != "live_chat" }
+            .sorted { lhs, rhs in
+                if lhs == "en" { return true }
+                if rhs == "en" { return false }
+                return lhs.localizedStandardCompare(rhs) == .orderedAscending
+            }
     }
 
     private static func domainName(for urlString: String) -> String {
