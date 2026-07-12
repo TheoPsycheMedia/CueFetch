@@ -33,6 +33,7 @@ extension View {
         tint: Color? = nil,
         interactive: Bool = false
     ) -> some View {
+#if compiler(>=6.2)
         if #available(macOS 26.0, *) {
             glassEffect(
                 .regular.tint(tint).interactive(interactive),
@@ -48,6 +49,16 @@ extension View {
                     .stroke(CueFetchTheme.glassStroke, lineWidth: 1)
             }
         }
+#else
+        background(
+            .ultraThinMaterial,
+            in: RoundedRectangle(cornerRadius: radius, style: .continuous)
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: radius, style: .continuous)
+                .stroke(CueFetchTheme.glassStroke, lineWidth: 1)
+        }
+#endif
     }
 
     @ViewBuilder
@@ -55,6 +66,7 @@ extension View {
         tint: Color? = nil,
         interactive: Bool = false
     ) -> some View {
+#if compiler(>=6.2)
         if #available(macOS 26.0, *) {
             glassEffect(
                 .regular.tint(tint).interactive(interactive),
@@ -67,24 +79,39 @@ extension View {
                         .stroke(CueFetchTheme.glassStroke, lineWidth: 1)
                 }
         }
+#else
+        background(.ultraThinMaterial, in: Circle())
+            .overlay {
+                Circle()
+                    .stroke(CueFetchTheme.glassStroke, lineWidth: 1)
+            }
+#endif
     }
 
     @ViewBuilder
     func cueGlassButtonStyle() -> some View {
+#if compiler(>=6.2)
         if #available(macOS 26.0, *) {
             buttonStyle(.glass)
         } else {
             buttonStyle(.bordered)
         }
+#else
+        buttonStyle(.bordered)
+#endif
     }
 
     @ViewBuilder
     func cueProminentGlassButtonStyle() -> some View {
+#if compiler(>=6.2)
         if #available(macOS 26.0, *) {
             buttonStyle(.glassProminent)
         } else {
             buttonStyle(.borderedProminent)
         }
+#else
+        buttonStyle(.borderedProminent)
+#endif
     }
 }
 
@@ -99,6 +126,7 @@ struct CueGlassContainer<Content: View>: View {
 
     @ViewBuilder
     var body: some View {
+#if compiler(>=6.2)
         if #available(macOS 26.0, *) {
             GlassEffectContainer(spacing: spacing) {
                 content
@@ -106,5 +134,8 @@ struct CueGlassContainer<Content: View>: View {
         } else {
             content
         }
+#else
+        content
+#endif
     }
 }
