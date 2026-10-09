@@ -22,7 +22,7 @@ jobs:
 
     steps:
       - name: Check out source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -86,7 +86,7 @@ jobs:
         run: ./script/build_and_run.sh --dmg
 
       - name: Upload coverage report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: cuefetch-coverage
           path: .build/ci-coverage/
@@ -95,7 +95,7 @@ jobs:
           retention-days: 14
 
       - name: Upload ad-hoc preview package
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: cuefetch-universal-preview
           path: |
